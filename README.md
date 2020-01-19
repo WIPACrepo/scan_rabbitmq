@@ -52,4 +52,6 @@ python consumer_new.py outputresults-path -q outqueue
 ```
 
 ## Combine results for pixels after all scans
+```
 python find_bestframe -i path-to-scan-results
+```
