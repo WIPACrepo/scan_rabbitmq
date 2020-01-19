@@ -1,7 +1,7 @@
 # scan_rabbitmq
 Rabbit-mq based queueing setup for icecube alerts on AWS
 
-Adapted from Dave Schultz rabbitmq-icetray and Claudio Kopper's skymap_scanner
+Adapted from Dave Schultz's rabbitmq-icetray and Claudio Kopper's skymap_scanner
 
 ## Start RabbitMQ
 Follow the instructions at the following link to install and start rabbit-mq
