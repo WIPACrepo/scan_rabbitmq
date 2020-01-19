@@ -11,7 +11,7 @@ https://www.rabbitmq.com/#getstarted
 pip install pika
 
 Or
-##TODO: Make a functional docker image 
+## TODO: Make a functional docker image 
 #Start RabbitMQ using a docker container:
 #
 #```
@@ -23,7 +23,7 @@ Or
 #For monitoring, you can get built-in stats via http://localhost:15672
 #and Prometheus via http://localhost:9090.
 
-##MAKE SURE YOU HAVE AN ACTIVE ICETRAY ENVIRONMENT.
+## MAKE SURE YOU HAVE AN ACTIVE ICETRAY ENVIRONMENT.
 
 ## Run a producer
 
