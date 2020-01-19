@@ -1,0 +1,43 @@
+.. $Id$
+.. $Author$
+.. $Date$
+
+
+Release Notes
+=============
+
+On the trunk
+------------
+
+- Added three fields to the full event message: Run, Event, Event time.
+  This is useful for querying events from I3Live (esp. as eventtime is indexed).
+
+June 12, 2018 Erik Blaufuss (blafufuss@umd.edu)
+-----------------------------------------------
+Release V01-01-01
+
+- update JSON encoded format for event data to include unique ID
+  in JSON report
+- update readers to read either event data format.
+- add unique ID generation function (single location) for use everywhere
+
+
+Mar 23, 2017 Erik Blaufuss (blaufuss@umd.edu)
+---------------------------------------------
+Release V01-01-00
+
+- Updates for newer python happiness
+- Including UTF8 unicode encoding for JSON encoding
+
+April 20, 2015 Meike de With (meike.de.with@desy.de)
+----------------------------------------------------
+Release V01-00-01
+
+- Make project compatible with Python 2.6 -- Claudio Kopper
+
+
+April 8, 2015 Meike de With (meike.de.with@desy.de)
+---------------------------------------------------
+Release V01-00-00
+
+Initial release
