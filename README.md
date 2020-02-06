@@ -1,7 +1,7 @@
 # scan_rabbitmq
 Rabbit-mq based queueing setup for icecube alerts on AWS
 
-Adapted from Dave Schultz rabbitmq-icetray and Claudio Kopper's skymap_scanner
+Adapted from Dave Schultz's rabbitmq-icetray and Claudio Kopper's skymap_scanner
 
 ## Start RabbitMQ
 Follow the instructions at the following link to install and start rabbit-mq
@@ -11,7 +11,7 @@ https://www.rabbitmq.com/#getstarted
 pip install pika
 
 Or
-#TODO: Make a functional docker image 
+## TODO: Make a functional docker image 
 #Start RabbitMQ using a docker container:
 #
 #```
@@ -23,7 +23,7 @@ Or
 #For monitoring, you can get built-in stats via http://localhost:15672
 #and Prometheus via http://localhost:9090.
 
-MAKE SURE YOU HAVE AN ICETRAY ENVIRONMENT RUNNING.
+## MAKE SURE YOU HAVE AN ACTIVE ICETRAY ENVIRONMENT.
 
 ## Run a producer
 
@@ -52,4 +52,6 @@ python consumer_new.py outputresults-path -q outqueue
 ```
 
 ## Combine results for pixels after all scans
+```
 python find_bestframe -i path-to-scan-results
+```
