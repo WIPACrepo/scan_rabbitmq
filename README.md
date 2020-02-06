@@ -55,3 +55,5 @@ python consumer_new.py outputresults-path -q outqueue
 ```
 python find_bestframe -i path-to-scan-results
 ```
+
+## alert_union contains scripts for writing scan results to fits file and plotting them as skymaps
