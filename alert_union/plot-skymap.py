@@ -31,7 +31,7 @@ if args.input is None:
 NSides = []
 maps = []
 headers = []
-
+runs = []
 ifiles = args.input
 
 for f in ifiles:
@@ -41,37 +41,39 @@ for f in ifiles:
     maps.append(skymap)
     headers.append(header)
     NSides.append(nside)
+    runs.append(f[f.find("Run"):f.find("_")])
+#NSides,maps,headers = zip(*sorted(zip(NSides,maps,headers)))
 
-NSides,maps,headers = zip(*sorted(zip(NSides,maps,headers)))
-
-ns_max = max(NSides)
-ns_min = min(NSides)
+#ns_max = max(NSides)
+#ns_min = min(NSides)
 
 
 
-for nside, skymap, header in zip(NSides,maps, headers):
+for nside, skymap, header,run in zip(NSides,maps, headers,runs):
 #Mask out bad pixels
    pxls = np.arange(skymap.size)
    nZeroPix = pxls[(skymap != 0)]
    pxTh, pxPh = hp.pix2ang(nside,pxls)
-   values = np.ma.masked_where((pxTh > pxTh[nZeroPix].max())
-                                   | (pxTh < pxTh[nZeroPix].min())
-                                   | (skymap == hp.UNSEEN)
-                                   | (skymap == 1e20)
-                                   |(skymap==0) , skymap)
+  # values = np.ma.masked_where((pxTh > pxTh[nZeroPix].max())
+  #                                 | (pxTh < pxTh[nZeroPix].min())
+  #                                 | (skymap == hp.UNSEEN)
+  #                                 | (skymap == 1e20,skymap)
+   values = np.ma.masked_where((skymap == hp.UNSEEN)
+				|(skymap == 1e20),skymap)
    
    #Find pixel with minimum LLH and create map boundaries
    min_pix = np.ma.where(values == values.min())
-   values = values - values[min_pix]     #Renormalize map
-   values = 2*values     #TS = 2*DeltaLLH
+   #values = values - values[min_pix]     #Renormalize map
+   #values = 2*values     #TS = 2*DeltaLLH
    max_TS = values[min_pix]  
     
    th,ph =  hp.pix2ang(nside,min_pix)
    src_ra = ph[0]
    src_dec = np.pi/2 - th[0]    #healpix convention
-   #src_dec = th[0] - np.pi/2
+#   src_dec = th[0] - np.pi/2
    rad = np.radians(args.rad)
-   
+   print("Best pix: %s,2*deltaLLH:%s"%(min_pix,max_TS))
+   print("RA %s, Dec %s"%(np.degrees(src_ra),np.degrees(-src_dec)))
    xmin, xmax = src_ra - rad, src_ra + rad
    ymin, ymax = src_dec - rad, src_dec + rad
    
@@ -90,17 +92,16 @@ for nside, skymap, header in zip(NSides,maps, headers):
                margins=margins,
                return_projected_map=True)
    plt.close(tfig)
-   
+   vmax = values.min()+5000
    #Plot map zoomed around the alert
    r = np.degrees(src_ra)
    d = np.degrees(src_dec)
-   print(r,d)
    f,ax = plt.subplots(1,1,figsize=(12,8))
-   pos = ax.imshow(img,extent = [xmin[0],xmax[0],ymin[0],ymax[0]],vmin = values.min(),vmax=values.max()/2.5
+   pos = ax.imshow(img,extent = [xmin[0],xmax[0],ymin[0],ymax[0]],vmin = values.min(),vmax=vmax
    ,cmap = 'magma')
    
-   f.colorbar(pos)
-   ax.plot(np.degrees(src_ra),np.degrees(src_dec),ls=None,marker = 'X',markersize = 16,color = 'w')
+   f.colorbar(pos,orientation = 'horizontal',shrink = 0.6, label = r'$2\Delta$LLH')
+   ax.plot(np.degrees(src_ra),np.degrees(src_dec),ls=None,marker = 'X',markersize = 13,color = 'w')
    ax.set(xlabel = "RA $[^\circ]$",ylabel = "$\delta [^\circ]$",title = "NSIDE %s"%header['NSIDE'])
    
    ax.grid()
@@ -108,12 +109,17 @@ for nside, skymap, header in zip(NSides,maps, headers):
    contour_labels = [r'50%', r'90%']
    contour_colors=['y', 'r']
 
-#   CS = ax.contour(img,levels = contour_levels,colors=contour_colors, extent = [xmin[0],xmax[0],ymin[0],ymax[0]])
- #  ax.clabel(CS, inline=False, fontsize=12, fmt=dict(zip(contour_levels, contour_labels))) 
-   circle0 = Circle((r,d),radius=4,facecolor = 'None',edgecolor = "r")
-   ax.add_patch(circle0) 
+   CS = ax.contour(img,levels = contour_levels,colors=contour_colors, extent = [xmin[0],xmax[0],ymin[0],ymax[0]])
+   #Fix yticks
+   locy,lby = plt.yticks()
+   ax.set_yticklabels(-1*locy)
+   #Flip RA axis to astro convention
+   ax.set_xlim(xmax[0],xmin[0])
+#   ax.clabel(CS, inline=False, fontsize=12, fmt=dict(zip(contour_levels, contour_labels))) 
+ #  circle0 = Circle((r,d),radius=4,facecolor = 'None',edgecolor = "r")
+  # ax.add_patch(circle0) 
    if args.output:
-      f.savefig('%s_Nside%s.png'%(args.output,nside))
+      f.savefig('%s%s_Nside%s.png'%(args.output,run,nside))
       plt.close(f)
    else:
       plt.show()
@@ -123,14 +129,16 @@ for nside, skymap, header in zip(NSides,maps, headers):
       hp.mollview(skymap, fig=3,
                xsize=1000,
                coord=['C'],
-               rot=0,cbar=True,
+               rot=180,cbar=True,
                cmap = 'magma',
                title=r"NSIDE %s"%nside)
       hp.projscatter(th,src_ra,marker = 'X',color= 'w',s=30)
       #hp.projscatter(src_dec-np.pi/2,src_ra,marker = 'X',color= 'w',s=30)
-      hp.projtext(th+0.08,src_ra-0.08,"IC200120",color= 'w')
+      hp.projtext(th+0.08,src_ra-0.08,"%s"%header['EVENTID'],color= 'w')
       ax1 = fig.get_axes()[0]
+      ax1.annotate("  0$^\circ$", xy=(1.65, 0.625), size="large")
+      ax1.annotate("360$^\circ$", xy=(-1.9, 0.625), size="large")
       #hp.graticule()
-      fig.savefig("%sMollweide_Nside%s.png"%(args.allsky,nside))
+      fig.savefig("%s%sMollweide_Nside%s.png"%(args.output,run,nside))
    #   plt.show() 
       plt.close(fig)
