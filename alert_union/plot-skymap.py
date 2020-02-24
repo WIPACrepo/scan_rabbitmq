@@ -73,7 +73,7 @@ for nside, skymap, header,run in zip(NSides,maps, headers,runs):
 #   src_dec = th[0] - np.pi/2
    rad = np.radians(args.rad)
    print("Best pix: %s,2*deltaLLH:%s"%(min_pix,max_TS))
-   print("RA %s, Dec %s"%(np.degrees(src_ra),np.degrees(-src_dec)))
+   print("RA %s, Dec %s"%(np.degrees(src_ra),np.degrees(src_dec)))
    xmin, xmax = src_ra - rad, src_ra + rad
    ymin, ymax = src_dec - rad, src_dec + rad
    
@@ -102,7 +102,7 @@ for nside, skymap, header,run in zip(NSides,maps, headers,runs):
    
    f.colorbar(pos,orientation = 'horizontal',shrink = 0.6, label = r'$2\Delta$LLH')
    ax.plot(np.degrees(src_ra),np.degrees(src_dec),ls=None,marker = 'X',markersize = 13,color = 'w')
-   ax.set(xlabel = "RA $[^\circ]$",ylabel = "$\delta [^\circ]$",title = "NSIDE %s"%header['NSIDE'])
+   ax.set(xlabel = "RA $[^\circ]$",ylabel = "$\delta [^\circ]$",title = "Run %s"%header['RUNID'])
    
    ax.grid()
    contour_levels = (np.array([22.2, 64.2])+max_TS) # these are values determined from MC by Will on the TS (2*LLH)
@@ -111,15 +111,15 @@ for nside, skymap, header,run in zip(NSides,maps, headers,runs):
 
    CS = ax.contour(img,levels = contour_levels,colors=contour_colors, extent = [xmin[0],xmax[0],ymin[0],ymax[0]])
    #Fix yticks
-   locy,lby = plt.yticks()
-   ax.set_yticklabels(-1*locy)
+#   locy,lby = plt.yticks()
+#   ax.set_yticklabels(-1*locy)
    #Flip RA axis to astro convention
    ax.set_xlim(xmax[0],xmin[0])
 #   ax.clabel(CS, inline=False, fontsize=12, fmt=dict(zip(contour_levels, contour_labels))) 
  #  circle0 = Circle((r,d),radius=4,facecolor = 'None',edgecolor = "r")
   # ax.add_patch(circle0) 
    if args.output:
-      f.savefig('%s%s_Nside%s.png'%(args.output,run,nside))
+      f.savefig('%s%s_%s_Nside%s.png'%(args.output,run,header['EVENTID'],nside))
       plt.close(f)
    else:
       plt.show()
@@ -131,14 +131,20 @@ for nside, skymap, header,run in zip(NSides,maps, headers,runs):
                coord=['C'],
                rot=180,cbar=True,
                cmap = 'magma',
-               title=r"NSIDE %s"%nside)
+               title=r"%s"%run)
       hp.projscatter(th,src_ra,marker = 'X',color= 'w',s=30)
       #hp.projscatter(src_dec-np.pi/2,src_ra,marker = 'X',color= 'w',s=30)
       hp.projtext(th+0.08,src_ra-0.08,"%s"%header['EVENTID'],color= 'w')
       ax1 = fig.get_axes()[0]
-      ax1.annotate("  0$^\circ$", xy=(1.65, 0.625), size="large")
-      ax1.annotate("360$^\circ$", xy=(-1.9, 0.625), size="large")
+     # ax1.annotate("  0$^\circ$", xy=(1.65, 0.625), size="large")
+#      ax1.annotate("360$^\circ$", xy=(-1.9, 0.625), size="large")
+      ax1.text(2.0,0., r"$0^\circ$", ha="left", va="center")
+      ax1.text(-2.0,0., r"$360^\circ$", ha="right", va="center")
+      ax1.text(1.9,0.45, r"$30^\circ$", ha="left", va="center")
+      ax1.text(1.4,0.8, r"$60^\circ$", ha="left", va="center")
+      ax1.text(1.9,-0.45, r"$-30^\circ$", ha="left", va="center")
+      ax1.text(1.4,-0.8, r"$-60^\circ$", ha="left", va="center")
       #hp.graticule()
-      fig.savefig("%s%sMollweide_Nside%s.png"%(args.output,run,nside))
-   #   plt.show() 
+      fig.savefig("%s%s_%sMollweide_Nside%s.png"%(args.output,run,header['EVENTID'],nside))
+#      plt.show() 
       plt.close(fig)
