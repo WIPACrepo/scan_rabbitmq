@@ -18,16 +18,16 @@ def pos_uncertainty(skymap,min_pix,err,nside):
     pos_th,pos_ph = hp.pix2ang(nside,min_pix)
     zoom = hp.query_disc(nside,hp.pix2vec(nside,min_pix),np.radians(20))
     zoom_llh = skymap[zoom]
-    diff_pix = zoom[(zoom_llh < err) & (zoom_llh >err-10)]
+    diff_pix = zoom[(zoom_llh < err) & (zoom_llh > 0)]
     th,ph = hp.pix2ang(nside,diff_pix)
-    diff_th,diff_ph = abs(th - pos_th), abs(ph - pos_ph) 
+    diff_th,diff_ph = th - pos_th, ph - pos_ph 
     min_th = diff_th.min()
     max_ph = diff_ph.max()
     min_ph = diff_ph.min()
     max_th = diff_th.max()
     avg_ph = np.average([min_ph,max_ph])
     avg_th = np.average([min_th,max_th])
-    return np.degrees(avg_ph),np.degrees(avg_th) 
+    return np.degrees(min_ph),np.degrees(max_ph),np.degrees(min_th),np.degrees(max_th) 
 
 def load_frames(infile):
     frame_packet = []
@@ -54,6 +54,15 @@ def extract_results(fpacket,nside):
     
     return np.concatenate(p_results)
 
+def fixpixnumber(nside,map_array):
+    o_pix = map_array['pix'].astype(int)
+    th_o, phi_o = hp.pix2ang(nside,o_pix)
+    dec_o = th_o - np.pi/2
+    th_fixed = np.pi/2 - dec_o 
+    pix_fixed = hp.ang2pix(nside,th_fixed,phi_o)
+    return pix_fixed
+
+
 
 parser = argparse.ArgumentParser(description = "Read i3 output of a scan and convert to fits format")
 parser.add_argument('-i', '--input', nargs = '+',dest = 'input',help = 'path to input file with scan results')
@@ -75,8 +84,14 @@ for pf in args.input:
            hese = f["AlertInfoHESE"]
            alert_pass = f["AlertPassed"].value
            break
-    
+
     cnn_vals = [float("%0.2e"%x) for x in cnn.values()]
+    
+    alert_type = None
+    signalness = None
+    far = None
+    nu_energy = None
+
     if  hese.keys():
         if hese['pass_loose'] == 1 or hese['pass_tight'] == 1:
            signalness = hese['signalness']
@@ -90,7 +105,7 @@ for pf in args.input:
 	   alert_type = 'GFU'
            nu_energy = gfu['E_nu_peak']
     
-    if alert_pass != 'none':
+    if alert_type == [] or alert_pass != 'none':
        alert_type = alert_pass
     print(alert_type)
     #Find nside from the Physics frame
@@ -113,7 +128,8 @@ for pf in args.input:
          skymap = hp.ud_grade(skymap,nside)
       else:
          skymap = np.ones(npix)*np.inf
-    
+      
+    #  map_info['pix'] = fixpixnumber(nside,map_info)
       pix_index = [int(p) for p in map_info['pix']]
       skymap[pix_index] = map_info['llh']
       
@@ -121,46 +137,55 @@ for pf in args.input:
     min_pix = int(map_info[map_info['llh'] == min(map_info['llh'])]['pix'])
     th,ph = hp.pix2ang(nside,min_pix)
     ra = np.degrees(ph)
-    dec = np.degrees(th - np.pi/2)
+    #dec = np.degrees(th - np.pi/2)
+    dec = np.degrees(np.pi/2 - th)
     skymap = 2*skymap
     skymap = skymap - skymap[min_pix] #Rescale such that min LLH is at zero
     uncertainty = pos_uncertainty(skymap,min_pix,64.2,nside)
-     
     deposited_e = map_info[map_info['pix']==min_pix]['energy']
     
     #Write FITS Header
-    if not np.isnan(nu_energy):
+    if nu_energy and not np.isnan(nu_energy):
        nu_energy = int(nu_energy)
        far = np.around(far,2)
        signalness = np.around(signalness,3)
     else:
-       print("Warning: Nan values in header")
-    header = [('RUNID','%s'%run_id),
-	  ('EVENTID','%s'%event_id),
+       print("Warning: Nan/empty fields in header")
+    header = [('RUNID',run_id),
+	  ('EVENTID',event_id),
           ('SENDER','IceCube Collaboration'),
           ('START','%s'%str(start_time.date_time),'Event Start date and time UTC'),
-          ('EventMJD','%s'%start_time.mod_julian_day_double),
+          ('EventMJD',start_time.mod_julian_day_double),
     	('I3TYPE','%s'%alert_type,'Alert Type'),
-    	('RA','%0.2f +/- %.2f'%(ra,uncertainty[0]),'Degree. Error is 90% containment'),
-	('DEC','%0.2f +/- %0.2f'%(dec,uncertainty[1]),'Degree. Error is 90% containment'),
-    	('ENERGY','%s'%nu_energy, 'Estimated Neutrino Energy (GeV)'),
-            ('FAR','%s'%far,'False alarm rate (per year)'),
-            ('SIGNAL','%s'%signalness,'Signalness'),
-          ('CNNclass','Cascade,Skimming,Starting_Track,Stopping_Track,Through_Going_Track'),
-          ('CNNscore','%s'%cnn_vals,'For each CNNClass'),
+    	('RA',np.round(ra,2),'Degree'),
+    	('DEC',np.round(dec,2),'Degree'),
+	('RA_ERR_PLUS',np.round(uncertainty[1],2),'90% containment error high'),
+	('RA_ERR_MINUS',np.round(uncertainty[0],2),'90% containment error low'),
+	('DEC_ERR_PLUS',np.round(uncertainty[3],2),'90% containment error high'),
+	('DEC_ERR_MINUS',np.round(uncertainty[2],2),'90% containment error low'),
+    	('ENERGY',nu_energy, 'Estimated Neutrino Energy (GeV)'),
+            ('FAR',far,'False alarm rate (per year)'),
+            ('SIGNAL',signalness,'Signalness'),
+          ('CASCADE_SCR',cnn_vals[0],'CNN classifier score for cascade'),
+          ('SKIMMING_SCR',cnn_vals[1],'CNN classifier score for skimming event'),
+          ('START_SCR',cnn_vals[2],'CNN classifier score for starting track'),
+          ('STOP_SCR',cnn_vals[3],'CNN classifier score for stopping track'),
+          ('THRGOING_SCR',cnn_vals[4],'CNN classifier score for through-going track'),
+          #('CNNclass','Cascade,Skimming,Starting_Track,Stopping_Track,Through_Going_Track'),
+          #('CNNscore','%s'%cnn_vals,'For each CNNClass'),
     	('COMMENTS','50%(90%) unceratinty location => Change in 2LLH of 22.2(64.2)')]
      
       
     #Save file
-    hp.write_map("%sRun%s_nside%s.fits.gz"%(args.output,run_id,nside),
+    hp.write_map("%sRun%s_%s_nside%s.fits.gz"%(args.output,run_id,event_id,nside),
         skymap,coord = 'C',column_names = ['2LLH'],extra_header = header,overwrite = True)
     
     #Save bestfit loc
-    print(run_id,ra,dec,deposited_e,min_pix) 
-    #ofile = 'alerts_out.txt'
-    #w = open(ofile,'a')
-    #w.write("%s\t%0.2f\t%0.2f\t%f,%s\n"%(run_id,ra,dec,deposited_e,min_pix))
-    #w.close()
+#    print(run_id,ra,dec,deposited_e,min_pix) 
+#    ofile = 'alerts_out_new.txt'
+#    w = open(ofile,'a')
+#    w.write("%s\t%0.2f\t%0.2f\t%0.2f\t%s\n"%(run_id,ra,dec,deposited_e,min_pix))
+#    w.close()
 
 
 #Alternate Using Astropy tables
