@@ -1,4 +1,5 @@
 import matplotlib as mpl
+mpl.use("Agg")
 mpl.rc('font',family='serif',size=18)
 mpl.rc("text",usetex = True)
 import matplotlib.pyplot as plt
@@ -24,7 +25,7 @@ p.add_argument('-s','--allsky',type=str,default=None,
 args = p.parse_args()
 
 if args.input is None:
-    print 'Please provide input map file'
+    print('Please provide input map file')
     quit(1)
 
 #Read input maps and sort them by nside
@@ -41,7 +42,8 @@ for f in ifiles:
     maps.append(skymap)
     headers.append(header)
     NSides.append(nside)
-    runs.append(f[f.find("Run"):f.find("_")])
+    b = os.path.basename(f)
+    runs.append(b[b.find("Run"):b.find("_")])
 #NSides,maps,headers = zip(*sorted(zip(NSides,maps,headers)))
 
 #ns_max = max(NSides)
@@ -50,6 +52,7 @@ for f in ifiles:
 
 
 for nside, skymap, header,run in zip(NSides,maps, headers,runs):
+   print(run)
 #Mask out bad pixels
    pxls = np.arange(skymap.size)
    nZeroPix = pxls[(skymap != 0)]
@@ -79,9 +82,9 @@ for nside, skymap, header,run in zip(NSides,maps, headers,runs):
    
    xmin, xmax = np.degrees(xmin),np.degrees(xmax)
    ymin, ymax = np.degrees(ymin),np.degrees(ymax)
-   
+   print(xmin,xmax,ymin,ymax) 
    margins = (0.05,0.25,0.05,0.05)
-   
+ 
    tfig   = plt.figure(num=1)
    img = hp.cartview(values,fig=1,
                 coord=['C'], notext=True,
@@ -110,9 +113,6 @@ for nside, skymap, header,run in zip(NSides,maps, headers,runs):
    contour_colors=['y', 'r']
 
    CS = ax.contour(img,levels = contour_levels,colors=contour_colors, extent = [xmin[0],xmax[0],ymin[0],ymax[0]])
-   #Fix yticks
-#   locy,lby = plt.yticks()
-#   ax.set_yticklabels(-1*locy)
    #Flip RA axis to astro convention
    ax.set_xlim(xmax[0],xmin[0])
 #   ax.clabel(CS, inline=False, fontsize=12, fmt=dict(zip(contour_levels, contour_labels))) 
@@ -129,7 +129,7 @@ for nside, skymap, header,run in zip(NSides,maps, headers,runs):
       hp.mollview(skymap, fig=3,
                xsize=1000,
                coord=['C'],
-               rot=180,cbar=True,
+               rot=180,cbar=True,unit = r'$2\Delta$LLH',
                cmap = 'magma',
                title=r"%s"%run)
       hp.projscatter(th,src_ra,marker = 'X',color= 'w',s=30)

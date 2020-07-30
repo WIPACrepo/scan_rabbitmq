@@ -16,7 +16,7 @@ from astropy.table import Table
 
 def pos_uncertainty(skymap,min_pix,err,nside):
     pos_th,pos_ph = hp.pix2ang(nside,min_pix)
-    zoom = hp.query_disc(nside,hp.pix2vec(nside,min_pix),np.radians(20))
+    zoom = hp.query_disc(nside,hp.pix2vec(nside,min_pix),np.radians(10))
     zoom_llh = skymap[zoom]
     diff_pix = zoom[(zoom_llh < err) & (zoom_llh > 0)]
     th,ph = hp.pix2ang(nside,diff_pix)
@@ -70,12 +70,14 @@ parser.add_argument('-o', '--output', dest = 'output',help = 'Prefix for output 
 args = parser.parse_args()
 
 for pf in args.input:
-#pf = args.input
+
+    print(pf)
     frame_packet = load_frames(pf)
     
     #Extract event header info from the first Physics frame
     for f in frame_packet:
-        if f.Stop == icetray.I3Frame.Physics and "CNN_classification" in f:
+ #       if f.Stop == icetray.I3Frame.Physics and "CNN_classification" in f:
+        if f.Stop == icetray.I3Frame.Physics:
            event_id = f["I3EventHeader"].event_id
            run_id = f["I3EventHeader"].run_id
            start_time = f["I3EventHeader"].start_time
@@ -91,22 +93,20 @@ for pf in args.input:
     signalness = None
     far = None
     nu_energy = None
+    alert_type = alert_pass
 
     if  hese.keys():
-        if hese['pass_loose'] == 1 or hese['pass_tight'] == 1:
+        if alert_type == 'hese-gold' or alert_type == 'hese-bronze':
+    #    if hese['signalness'] and not np.isnan(hese['signalness']):
            signalness = hese['signalness']
            far = hese['yearly_rate']
-           alert_type = 'HESE'
            nu_energy = hese['E_nu_peak']
     if gfu.keys():
-        if gfu['pass_loose'] == 1 or gfu['pass_tight'] == 1 or gfu['pass_test'] == 1:
+        if alert_type == 'gfu-bronze' or alert_type == 'gfu-gold':
+     #   if gfu['signalness'] and not np.isnan(gfu['signalness']):
            signalness = gfu['signalness']
            far = gfu['yearly_rate']
-	   alert_type = 'GFU'
            nu_energy = gfu['E_nu_peak']
-    
-    if alert_type == [] or alert_pass != 'none':
-       alert_type = alert_pass
     print(alert_type)
     #Find nside from the Physics frame
     ns_array = []
@@ -116,9 +116,8 @@ for pf in args.input:
            ns_array.append(nside)
     #Extract pixel by pixel info
     Nsides = sorted(np.unique(ns_array))
-    
     skymap = None
-    
+    print(Nsides)
     for nside in Nsides:
       map_info = extract_results(frame_packet,nside)
       
@@ -129,24 +128,22 @@ for pf in args.input:
       else:
          skymap = np.ones(npix)*np.inf
       
-    #  map_info['pix'] = fixpixnumber(nside,map_info)
+      #map_info['pix'] = fixpixnumber(nside,map_info)
       pix_index = [int(p) for p in map_info['pix']]
       skymap[pix_index] = map_info['llh']
-      
     #Find bestfit pixel
     min_pix = int(map_info[map_info['llh'] == min(map_info['llh'])]['pix'])
     th,ph = hp.pix2ang(nside,min_pix)
     ra = np.degrees(ph)
-    #dec = np.degrees(th - np.pi/2)
+    
     dec = np.degrees(np.pi/2 - th)
     skymap = 2*skymap
     skymap = skymap - skymap[min_pix] #Rescale such that min LLH is at zero
-    uncertainty = pos_uncertainty(skymap,min_pix,64.2,nside)
+    uncertainty = abs(np.asarray(pos_uncertainty(skymap,min_pix,64.2,nside)))
     deposited_e = map_info[map_info['pix']==min_pix]['energy']
-    
     #Write FITS Header
     if nu_energy and not np.isnan(nu_energy):
-       nu_energy = int(nu_energy)
+       nu_energy = round(nu_energy/1000) #TeV
        far = np.around(far,2)
        signalness = np.around(signalness,3)
     else:
@@ -163,7 +160,7 @@ for pf in args.input:
 	('RA_ERR_MINUS',np.round(uncertainty[0],2),'90% containment error low'),
 	('DEC_ERR_PLUS',np.round(uncertainty[3],2),'90% containment error high'),
 	('DEC_ERR_MINUS',np.round(uncertainty[2],2),'90% containment error low'),
-    	('ENERGY',nu_energy, 'Estimated Neutrino Energy (GeV)'),
+    	('ENERGY',nu_energy, 'Estimated Neutrino Energy (TeV)'),
             ('FAR',far,'False alarm rate (per year)'),
             ('SIGNAL',signalness,'Signalness'),
           ('CASCADE_SCR',cnn_vals[0],'CNN classifier score for cascade'),
@@ -171,21 +168,23 @@ for pf in args.input:
           ('START_SCR',cnn_vals[2],'CNN classifier score for starting track'),
           ('STOP_SCR',cnn_vals[3],'CNN classifier score for stopping track'),
           ('THRGOING_SCR',cnn_vals[4],'CNN classifier score for through-going track'),
-          #('CNNclass','Cascade,Skimming,Starting_Track,Stopping_Track,Through_Going_Track'),
-          #('CNNscore','%s'%cnn_vals,'For each CNNClass'),
-    	('COMMENTS','50%(90%) unceratinty location => Change in 2LLH of 22.2(64.2)')]
+         #('CNNclass','Cascade,Skimming,Starting_Track,Stopping_Track,Through_Going_Track'),
+         #('CNNscore','%s'%cnn_vals,'For each CNNClass'),
+    	('COMMENTS','50%(90%) uncertainty location => Change in 2LLH of 22.2(64.2)'),
+	('NOTE','Please ignore pixels with infinite or NaN values. They are rare cases of the minimizer failing to converge') ]
      
       
     #Save file
     hp.write_map("%sRun%s_%s_nside%s.fits.gz"%(args.output,run_id,event_id,nside),
-        skymap,coord = 'C',column_names = ['2LLH'],extra_header = header,overwrite = True)
+        #skymap,coord = 'C',column_names = ['2LLH'],extra_header = header,overwrite = True)
+        skymap,coord = 'C',column_names = ['2LLH'],extra_header = header)
     
     #Save bestfit loc
-#    print(run_id,ra,dec,deposited_e,min_pix) 
-#    ofile = 'alerts_out_new.txt'
-#    w = open(ofile,'a')
-#    w.write("%s\t%0.2f\t%0.2f\t%0.2f\t%s\n"%(run_id,ra,dec,deposited_e,min_pix))
-#    w.close()
+    print(run_id,ra,dec,deposited_e,min_pix) 
+    ofile = 'scans_summary.txt'
+    w = open(ofile,'a')
+    w.write("%s\t%s\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t %s\t%s\n"%(run_id,event_id,ra,dec,uncertainty[0],uncertainty[1],uncertainty[2],uncertainty[3],deposited_e[0],signalness,far))
+    w.close()
 
 
 #Alternate Using Astropy tables
