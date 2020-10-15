@@ -20,13 +20,15 @@ def pos_uncertainty(skymap,min_pix,err,nside):
     zoom_llh = skymap[zoom]
     diff_pix = zoom[(zoom_llh < err) & (zoom_llh > 0)]
     th,ph = hp.pix2ang(nside,diff_pix)
-    diff_th,diff_ph = th - pos_th, ph - pos_ph 
+    diff_th,diff_ph = th - pos_th, ph - pos_ph
+    if any(diff_ph<-np.pi):
+       diff_ph[diff_ph<-np.pi] = diff_ph[diff_ph<-np.pi] + np.radians(360) 
+    if any(diff_ph>pos_ph):
+       diff_ph[diff_ph>np.pi] = diff_ph[diff_ph>np.pi] - np.radians(360) 
     min_th = diff_th.min()
     max_ph = diff_ph.max()
     min_ph = diff_ph.min()
     max_th = diff_th.max()
-    avg_ph = np.average([min_ph,max_ph])
-    avg_th = np.average([min_th,max_th])
     return np.degrees(min_ph),np.degrees(max_ph),np.degrees(min_th),np.degrees(max_th) 
 
 def load_frames(infile):
@@ -117,7 +119,6 @@ for pf in args.input:
     #Extract pixel by pixel info
     Nsides = sorted(np.unique(ns_array))
     skymap = None
-    print(Nsides)
     for nside in Nsides:
       map_info = extract_results(frame_packet,nside)
       
@@ -140,7 +141,11 @@ for pf in args.input:
     skymap = 2*skymap
     skymap = skymap - skymap[min_pix] #Rescale such that min LLH is at zero
     uncertainty = abs(np.asarray(pos_uncertainty(skymap,min_pix,64.2,nside)))
+#    uncertainty = np.asarray(pos_uncertainty(skymap,min_pix,64.2,nside))
     deposited_e = map_info[map_info['pix']==min_pix]['energy']
+
+    print("RA,DEC","Uncertainty")
+    print(ra,dec,uncertainty)
     #Write FITS Header
     if nu_energy and not np.isnan(nu_energy):
        nu_energy = round(nu_energy/1000) #TeV
