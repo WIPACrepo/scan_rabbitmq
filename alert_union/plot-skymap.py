@@ -1,5 +1,5 @@
 import matplotlib as mpl
-mpl.use("Agg")
+#mpl.use("Agg")
 mpl.rc('font',family='serif',size=18)
 mpl.rc("text",usetex = True)
 import matplotlib.pyplot as plt
@@ -65,10 +65,15 @@ for nside, skymap, header,run in zip(NSides,maps, headers,runs):
 				|(skymap == 1e20),skymap)
    
    #Find pixel with minimum LLH and create map boundaries
-   min_pix = np.ma.where(values == values.min())
-   #values = values - values[min_pix]     #Renormalize map
-   #values = 2*values     #TS = 2*DeltaLLH
-   max_TS = values[min_pix]  
+   min_pix = np.ma.where(values == values.min())[0]
+   if len(min_pix) > 1:
+      min_pix = [int(np.median(min_pix))]
+      values = values - values[min_pix]     #Renormalize map
+      max_TS = values[min_pix]
+   else:
+      values = values - values[min_pix]     #Renormalize map
+      max_TS = values[min_pix]
+
     
    th,ph =  hp.pix2ang(nside,min_pix)
    src_ra = ph[0]
@@ -82,25 +87,24 @@ for nside, skymap, header,run in zip(NSides,maps, headers,runs):
    
    xmin, xmax = np.degrees(xmin),np.degrees(xmax)
    ymin, ymax = np.degrees(ymin),np.degrees(ymax)
-   print(xmin,xmax,ymin,ymax) 
    margins = (0.05,0.25,0.05,0.05)
+   vmax = values.min()+2000
  
    tfig   = plt.figure(num=1)
    img = hp.cartview(values,fig=1,
                 coord=['C'], notext=True,
-               lonra=[xmin[0],xmax[0]],
-               latra=[ymin[0],ymax[0]],
+               lonra=[xmin,xmax],
+               latra=[ymin,ymax],
                xsize=1000,
-               min=values.min(), max=values.max(),
+               min=values.min(), max=vmax,
                margins=margins,
                return_projected_map=True)
    plt.close(tfig)
-   vmax = values.min()+5000
    #Plot map zoomed around the alert
    r = np.degrees(src_ra)
    d = np.degrees(src_dec)
    f,ax = plt.subplots(1,1,figsize=(12,8))
-   pos = ax.imshow(img,extent = [xmin[0],xmax[0],ymin[0],ymax[0]],vmin = values.min(),vmax=vmax
+   pos = ax.imshow(img,extent = [xmin,xmax,ymin,ymax],vmin = values.min(),vmax=vmax
    ,cmap = 'magma')
    
    f.colorbar(pos,orientation = 'horizontal',shrink = 0.6, label = r'$2\Delta$LLH')
@@ -112,10 +116,16 @@ for nside, skymap, header,run in zip(NSides,maps, headers,runs):
    contour_labels = [r'50%', r'90%']
    contour_colors=['y', 'r']
 
-   CS = ax.contour(img,levels = contour_levels,colors=contour_colors, extent = [xmin[0],xmax[0],ymin[0],ymax[0]])
+   CS = ax.contour(img,levels = contour_levels,colors=contour_colors, extent = [xmax,xmin,ymin,ymax])
+   p1 = CS.collections[1].get_paths()[0]
+   v = p1.vertices
+   x = v[:,0]
+   y = v[:,1]
+#   for r,d in zip(x,y):
+#       print(r,d)
    #Flip RA axis to astro convention
-   ax.set_xlim(xmax[0],xmin[0])
-#   ax.clabel(CS, inline=False, fontsize=12, fmt=dict(zip(contour_levels, contour_labels))) 
+   ax.set_xlim(xmax,xmin)
+   #ax.clabel(CS, inline=False, fontsize=12, fmt=dict(zip(contour_levels, contour_labels))) 
  #  circle0 = Circle((r,d),radius=4,facecolor = 'None',edgecolor = "r")
   # ax.add_patch(circle0) 
    if args.output:

@@ -20,7 +20,7 @@ def pos_uncertainty(skymap,min_pix,err,nside):
     zoom_llh = skymap[zoom]
     diff_pix = zoom[(zoom_llh < err) & (zoom_llh > 0)]
     th,ph = hp.pix2ang(nside,diff_pix)
-    diff_th,diff_ph = th - pos_th, ph - pos_ph
+    diff_th,diff_ph = (np.pi/2-th) - (np.pi/2-pos_th), ph - pos_ph
     if any(diff_ph<-np.pi):
        diff_ph[diff_ph<-np.pi] = diff_ph[diff_ph<-np.pi] + np.radians(360) 
     if any(diff_ph>pos_ph):
@@ -36,7 +36,7 @@ def load_frames(infile):
     i3f = dataio.I3File(infile)
     while True:
        if not i3f.more():
-	  return frame_packet
+          return frame_packet
        frame = i3f.pop_frame()
        frame_packet.append(frame)
 
@@ -47,12 +47,12 @@ def extract_results(fpacket,nside):
     for f in frame_packet:
       if "MillipedeStarting2ndPass_millipedellh" in f:
         if f["SCAN_HealpixNSide"].value == nside:
-	   fr_info = np.empty(1,[(n,float) for n in names])
+           fr_info = np.empty(1,[(n,float) for n in names])
            fr_info['pix'] = f["SCAN_HealpixPixel"].value
-	   fr_info['llh'] = f["MillipedeStarting2ndPass_millipedellh"].logl
-	   fr_info['energy'] = f["MillipedeStarting2ndPass_totalRecoLossesTotal"].value
+           fr_info['llh'] = f["MillipedeStarting2ndPass_millipedellh"].logl
+#           fr_info['energy'] = f["MillipedeStarting2ndPass_totalRecoLossesTotal"].value
 	   
-	   p_results.append(fr_info)
+           p_results.append(fr_info)
     
     return np.concatenate(p_results)
 
@@ -78,8 +78,7 @@ for pf in args.input:
     
     #Extract event header info from the first Physics frame
     for f in frame_packet:
- #       if f.Stop == icetray.I3Frame.Physics and "CNN_classification" in f:
-        if f.Stop == icetray.I3Frame.Physics:
+        if f.Stop == icetray.I3Frame.Physics and "CNN_classification" in f:
            event_id = f["I3EventHeader"].event_id
            run_id = f["I3EventHeader"].run_id
            start_time = f["I3EventHeader"].start_time
@@ -99,13 +98,13 @@ for pf in args.input:
 
     if  hese.keys():
         if alert_type == 'hese-gold' or alert_type == 'hese-bronze':
-    #    if hese['signalness'] and not np.isnan(hese['signalness']):
+        #if hese['signalness'] and not np.isnan(hese['signalness']):
            signalness = hese['signalness']
            far = hese['yearly_rate']
            nu_energy = hese['E_nu_peak']
     if gfu.keys():
         if alert_type == 'gfu-bronze' or alert_type == 'gfu-gold':
-     #   if gfu['signalness'] and not np.isnan(gfu['signalness']):
+      #  if gfu['signalness'] and not np.isnan(gfu['signalness']):
            signalness = gfu['signalness']
            far = gfu['yearly_rate']
            nu_energy = gfu['E_nu_peak']
@@ -118,6 +117,7 @@ for pf in args.input:
            ns_array.append(nside)
     #Extract pixel by pixel info
     Nsides = sorted(np.unique(ns_array))
+    print(Nsides)
     skymap = None
     for nside in Nsides:
       map_info = extract_results(frame_packet,nside)
@@ -129,24 +129,35 @@ for pf in args.input:
       else:
          skymap = np.ones(npix)*np.inf
       
-      #map_info['pix'] = fixpixnumber(nside,map_info)
+      map_info['pix'] = fixpixnumber(nside,map_info)
       pix_index = [int(p) for p in map_info['pix']]
       skymap[pix_index] = map_info['llh']
+    
     #Find bestfit pixel
-    min_pix = int(map_info[map_info['llh'] == min(map_info['llh'])]['pix'])
+    #min_pix = int(map_info[map_info['llh'] == min(map_info['llh'])]['pix'])
+    min_pix = np.where(skymap == skymap.min())[0]
+    
+    if len(min_pix) > 1:
+      min_pix = int(np.median(min_pix))
+    else:
+      min_pix = int(min_pix)
+    
+   
     th,ph = hp.pix2ang(nside,min_pix)
     ra = np.degrees(ph)
     
     dec = np.degrees(np.pi/2 - th)
     skymap = 2*skymap
+    skymap = np.ma.masked_where((skymap == hp.UNSEEN)
+				|(skymap == np.nan),skymap)
     skymap = skymap - skymap[min_pix] #Rescale such that min LLH is at zero
     uncertainty = abs(np.asarray(pos_uncertainty(skymap,min_pix,64.2,nside)))
 #    uncertainty = np.asarray(pos_uncertainty(skymap,min_pix,64.2,nside))
-    deposited_e = map_info[map_info['pix']==min_pix]['energy']
+#    deposited_e = map_info[map_info['pix']==min_pix]['energy']
 
     print("RA,DEC","Uncertainty")
     print(ra,dec,uncertainty)
-    #Write FITS Header
+   #Write FITS Header
     if nu_energy and not np.isnan(nu_energy):
        nu_energy = round(nu_energy/1000) #TeV
        far = np.around(far,2)
@@ -163,8 +174,8 @@ for pf in args.input:
     	('DEC',np.round(dec,2),'Degree'),
 	('RA_ERR_PLUS',np.round(uncertainty[1],2),'90% containment error high'),
 	('RA_ERR_MINUS',np.round(uncertainty[0],2),'90% containment error low'),
-	('DEC_ERR_PLUS',np.round(uncertainty[3],2),'90% containment error high'),
-	('DEC_ERR_MINUS',np.round(uncertainty[2],2),'90% containment error low'),
+	('DEC_ERR_PLUS',np.round(uncertainty[2],2),'90% containment error high'),
+	('DEC_ERR_MINUS',np.round(uncertainty[3],2),'90% containment error low'),
     	('ENERGY',nu_energy, 'Estimated Neutrino Energy (TeV)'),
             ('FAR',far,'False alarm rate (per year)'),
             ('SIGNAL',signalness,'Signalness'),
@@ -173,8 +184,6 @@ for pf in args.input:
           ('START_SCR',cnn_vals[2],'CNN classifier score for starting track'),
           ('STOP_SCR',cnn_vals[3],'CNN classifier score for stopping track'),
           ('THRGOING_SCR',cnn_vals[4],'CNN classifier score for through-going track'),
-         #('CNNclass','Cascade,Skimming,Starting_Track,Stopping_Track,Through_Going_Track'),
-         #('CNNscore','%s'%cnn_vals,'For each CNNClass'),
     	('COMMENTS','50%(90%) uncertainty location => Change in 2LLH of 22.2(64.2)'),
 	('NOTE','Please ignore pixels with infinite or NaN values. They are rare cases of the minimizer failing to converge') ]
      
@@ -185,11 +194,11 @@ for pf in args.input:
         skymap,coord = 'C',column_names = ['2LLH'],extra_header = header)
     
     #Save bestfit loc
-    print(run_id,ra,dec,deposited_e,min_pix) 
-    ofile = 'scans_summary.txt'
-    w = open(ofile,'a')
-    w.write("%s\t%s\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t %s\t%s\n"%(run_id,event_id,ra,dec,uncertainty[0],uncertainty[1],uncertainty[2],uncertainty[3],deposited_e[0],signalness,far))
-    w.close()
+    print(run_id,ra,dec,min_pix) 
+#    ofile = 'summary2020.txt'
+#    w = open(ofile,'a')
+#    w.write("%s\t%s\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t%0.2f\t %s\t%s\n"%(run_id,event_id,ra,dec,uncertainty[0],uncertainty[1],uncertainty[2],uncertainty[3],deposited_e[0],signalness,far))
+#    w.close()
 
 
 #Alternate Using Astropy tables
